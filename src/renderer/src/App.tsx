@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from './lib/supabase'
-import NarrativeEditor from './components/NarrativeEditor'
+import WritingWorkspace from './components/WritingWorkspace'
 
 export default function App() {
   const [ready, setReady] = useState(false)
@@ -33,7 +33,7 @@ export default function App() {
 
   return (
     <div className="h-screen w-screen bg-[#141414] overflow-hidden">
-      <NarrativeEditor />
+      <WritingWorkspace />
     </div>
   )
 }

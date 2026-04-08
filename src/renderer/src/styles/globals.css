@@ -47,12 +47,30 @@
 :root {
   --font-ui: 'Work Sans Variable', sans-serif;
   --font-editor: 'Joly Text', Georgia, serif;
+  --editor-anchor-ratio: 0.5;
+  --editor-anchor-dead-zone: 24px;
+  --editor-top-space: clamp(72px, 10vh, 48px);
+  --editor-bottom-space: clamp(38vh, 50vh, 60vh);
+  /* AppModal.tsx — tweak insets here (px or rem). */
+  --app-modal-viewport-gutter: 24px;
+  --app-modal-content-inset: 24px;
+  --app-modal-title-to-body: 24px;
 }
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+/*
+ * Tailwind’s utilities live in @layer utilities. A bare `* { padding: 0 }` outside
+ * any layer is “unlayered” and wins over layered rules — so every `p-*`, `m-*`,
+ * gap-*, etc. looked broken while DevTools still showed the classes on the node.
+ * Keep this reset inside @layer base so utilities can override it.
+ */
+@layer base {
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
 }
 
 body {
@@ -153,7 +171,8 @@ body {
 .editor-container {
   width: 648px;
   margin: 0 auto;
-  padding-top: 64px;
+  padding-top: var(--editor-top-space);
+  padding-bottom: var(--editor-bottom-space);
 }
 
 /* Placeholder */
