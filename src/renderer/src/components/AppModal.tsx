@@ -32,6 +32,11 @@ export type AppModalProps = {
   /** Shown in the header. If omitted, pass aria-label for the dialog. */
   title?: string
   'aria-label'?: string
+  /**
+   * Match header edges to list-style body rows: title with `px-4` pick padding,
+   * close with `pr-2` like trailing row actions (e.g. Narratives list).
+   */
+  alignHeaderWithListBody?: boolean
 }
 
 export default function AppModal({
@@ -39,7 +44,8 @@ export default function AppModal({
   onClose,
   children,
   title,
-  'aria-label': ariaLabel
+  'aria-label': ariaLabel,
+  alignHeaderWithListBody = false
 }: AppModalProps) {
   const titleId = useId()
   const panelRef = useRef<HTMLDivElement>(null)
@@ -140,22 +146,26 @@ export default function AppModal({
               {title ? (
                 <h2
                   id={titleId}
-                  className="min-w-0 flex-1 text-left text-2xl font-semibold tracking-tight text-white leading-tight"
+                  className={`min-w-0 flex-1 text-left text-2xl font-semibold tracking-tight text-white leading-tight ${
+                    alignHeaderWithListBody ? 'pl-4' : ''
+                  }`}
                 >
                   {title}
                 </h2>
               ) : (
                 <span className="flex-1" />
               )}
-              <button
-                ref={closeButtonRef}
-                type="button"
-                onClick={onClose}
-                className="shrink-0 text-gray-400 p-2 transition-all rounded hover:text-white hover:bg-white/10"
-                aria-label="Close"
-              >
-                <XMarkIcon strokeWidth={1.5} className="w-5 h-5" aria-hidden />
-              </button>
+              <div className={alignHeaderWithListBody ? 'flex shrink-0 items-start pr-2' : 'contents'}>
+                <button
+                  ref={closeButtonRef}
+                  type="button"
+                  onClick={onClose}
+                  className="shrink-0 text-gray-400 p-2 transition-all rounded hover:text-white hover:bg-white/10"
+                  aria-label="Close"
+                >
+                  <XMarkIcon strokeWidth={1.5} className="w-5 h-5" aria-hidden />
+                </button>
+              </div>
             </header>
 
             <div

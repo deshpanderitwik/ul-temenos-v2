@@ -5,11 +5,14 @@
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
-    "build": "electron-vite build"
+    "build": "electron-vite build",
+    "test": "tsx --test src/renderer/src/lib/autosaveConfig.test.ts",
+    "mcp:dev": "tsx src/mcp/server.ts"
   },
   "dependencies": {
     "@fontsource-variable/work-sans": "^5.2.8",
     "@heroicons/react": "^2.2.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@supabase/supabase-js": "^2.100.0",
     "@tiptap/extension-placeholder": "^3.20.4",
     "@tiptap/pm": "^3.20.4",
@@ -30,6 +33,7 @@
     "electron-vite": "^5.0.0",
     "jsdom": "^29.0.1",
     "tailwindcss": "^4.2.2",
+    "tsx": "^4.21.0",
     "typescript": "^6.0.2",
     "vitest": "^4.1.2"
   }

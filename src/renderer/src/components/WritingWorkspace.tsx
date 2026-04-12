@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ClockIcon, PlusIcon, RectangleStackIcon } from '@heroicons/react/24/outline'
-import { EMPTY_NARRATIVE_CONTENT } from '../lib/emptyNarrativeContent'
-import { supabase } from '../lib/supabase'
+import { createNarrative, getLatestNarrativeId, onExternalChange } from '../lib/narrativeStore'
 import NarrativeEditor from './NarrativeEditor'
 import NarrativesList from './NarrativesList'
 import AppModal from './AppModal'
@@ -15,7 +14,10 @@ export default function WritingWorkspace() {
   const [narrativesModalOpen, setNarrativesModalOpen] = useState(false)
   const [activeNarrativeId, setActiveNarrativeId] = useState<string | null>(null)
   const [creatingNarrative, setCreatingNarrative] = useState(false)
+  const [editorReloadKey, setEditorReloadKey] = useState(0)
   const creatingLockRef = useRef(false)
+  const activeNarrativeIdRef = useRef(activeNarrativeId)
+  activeNarrativeIdRef.current = activeNarrativeId
 
   const createNewNarrative = useCallback(async () => {
     if (creatingLockRef.current) return
@@ -23,25 +25,9 @@ export default function WritingWorkspace() {
     setCreatingNarrative(true)
 
     try {
-      const {
-        data: { user }
-      } = await supabase.auth.getUser()
-      if (!user) return
-
-      const { data, error } = await supabase
-        .from('narratives')
-        .insert({
-          user_id: user.id,
-          title: 'Untitled',
-          content: EMPTY_NARRATIVE_CONTENT
-        })
-        .select('id')
-        .single()
-
-      if (error || !data?.id) return
-
+      const { narrativeId } = await createNarrative()
       setNarrativesModalOpen(false)
-      setActiveNarrativeId(data.id)
+      setActiveNarrativeId(narrativeId)
     } finally {
       creatingLockRef.current = false
       setCreatingNarrative(false)
@@ -52,25 +38,34 @@ export default function WritingWorkspace() {
     let cancelled = false
 
     async function bootstrapLatestNarrative() {
-      const {
-        data: { user }
-      } = await supabase.auth.getUser()
-      if (!user || cancelled) return
-
-      const { data } = await supabase
-        .from('narratives')
-        .select('id')
-        .order('updated_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-
-      if (!cancelled && data?.id) setActiveNarrativeId(data.id)
+      const id = await getLatestNarrativeId()
+      if (!cancelled && id) setActiveNarrativeId(id)
     }
 
     bootstrapLatestNarrative()
     return () => {
       cancelled = true
     }
+  }, [])
+
+  useEffect(() => {
+    return onExternalChange(({ filename }) => {
+      if (!filename) return
+
+      const parts = filename.split('/')
+      const narrativeId = parts[1] ?? null
+
+      if (narrativeId && narrativeId === activeNarrativeIdRef.current) {
+        setEditorReloadKey((k) => k + 1)
+      }
+
+      if (!activeNarrativeIdRef.current && narrativeId) {
+        void (async () => {
+          const id = await getLatestNarrativeId()
+          if (id) setActiveNarrativeId(id)
+        })()
+      }
+    })
   }, [])
 
   return (
@@ -107,6 +102,7 @@ export default function WritingWorkspace() {
         <NarrativeEditor
           activeNarrativeId={activeNarrativeId}
           onNarrativeIdAssigned={setActiveNarrativeId}
+          reloadKey={editorReloadKey}
         />
       </main>
 
@@ -114,12 +110,20 @@ export default function WritingWorkspace() {
         open={narrativesModalOpen}
         onClose={() => setNarrativesModalOpen(false)}
         title="Narratives"
+        alignHeaderWithListBody
       >
         <NarrativesList
           activeNarrativeId={activeNarrativeId}
           onPickNarrative={(id) => {
             setActiveNarrativeId(id)
             setNarrativesModalOpen(false)
+          }}
+          onNarrativeDeleted={(deletedId) => {
+            if (activeNarrativeId !== deletedId) return
+            void (async () => {
+              const id = await getLatestNarrativeId()
+              setActiveNarrativeId(id)
+            })()
           }}
         />
       </AppModal>

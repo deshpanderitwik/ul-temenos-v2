@@ -1,5 +1,8 @@
 import { app, BrowserWindow } from 'electron'
 import { join } from 'path'
+import { ensureStoreDir } from './store'
+import { registerIpcHandlers, startFileWatcher, stopFileWatcher } from './ipc'
+import { startSync, stopSync, syncNow } from './sync'
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -16,6 +19,10 @@ function createWindow(): void {
   mainWindow.maximize()
   mainWindow.show()
 
+  mainWindow.on('focus', () => {
+    syncNow()
+  })
+
   if (process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
@@ -24,6 +31,10 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  ensureStoreDir()
+  registerIpcHandlers()
+  startFileWatcher()
+  startSync()
   createWindow()
 
   app.on('activate', () => {
@@ -32,5 +43,7 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
+  stopSync()
+  stopFileWatcher()
   if (process.platform !== 'darwin') app.quit()
 })
