@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ClockIcon, PlusIcon, RectangleStackIcon } from '@heroicons/react/24/outline'
 import { createNarrative, getLatestNarrativeId, onExternalChange } from '../lib/narrativeStore'
 import NarrativeEditor from './NarrativeEditor'
 import NarrativesList from './NarrativesList'
 import AppModal from './AppModal'
+import TimerPopover from './TimerPopover'
 import { PrimaryRail, PrimaryRailButton } from './PrimaryRail'
 
 /**
@@ -15,6 +16,10 @@ export default function WritingWorkspace() {
   const [activeNarrativeId, setActiveNarrativeId] = useState<string | null>(null)
   const [creatingNarrative, setCreatingNarrative] = useState(false)
   const [editorReloadKey, setEditorReloadKey] = useState(0)
+  const [timerOpen, setTimerOpen] = useState(false)
+  const [timerProgress, setTimerProgress] = useState(0)
+  const [timerActive, setTimerActive] = useState(false)
+  const timerButtonRef = useRef<HTMLButtonElement>(null)
   const creatingLockRef = useRef(false)
   const activeNarrativeIdRef = useRef(activeNarrativeId)
   activeNarrativeIdRef.current = activeNarrativeId
@@ -74,7 +79,7 @@ export default function WritingWorkspace() {
         className="fixed left-5 top-1/2 z-30 -translate-y-1/2"
         aria-label="Primary tools"
       >
-        <PrimaryRail>
+        <PrimaryRail timerProgress={timerProgress} timerActive={timerActive}>
           <PrimaryRailButton
             label="New narrative"
             disabled={creatingNarrative}
@@ -85,10 +90,9 @@ export default function WritingWorkspace() {
             <PlusIcon strokeWidth={1.5} className="w-5 h-5" aria-hidden />
           </PrimaryRailButton>
           <PrimaryRailButton
-            label="History"
-            onClick={() => {
-              /* wire when history exists */
-            }}
+            ref={timerButtonRef}
+            label="Timer"
+            onClick={() => setTimerOpen((o) => !o)}
           >
             <ClockIcon strokeWidth={1.5} className="w-5 h-5" aria-hidden />
           </PrimaryRailButton>
@@ -97,6 +101,17 @@ export default function WritingWorkspace() {
           </PrimaryRailButton>
         </PrimaryRail>
       </aside>
+
+      <TimerPopover
+        open={timerOpen}
+        onClose={() => setTimerOpen(false)}
+        anchorRef={timerButtonRef}
+        onTimerStateChange={useCallback((state: 'idle' | 'running' | 'paused', remaining: number, total: number) => {
+          const active = state === 'running' || state === 'paused'
+          setTimerActive(active)
+          setTimerProgress(active && total > 0 ? remaining / total : 0)
+        }, [])}
+      />
 
       <main className="flex h-full min-h-0 w-full min-w-0 flex-col">
         <NarrativeEditor

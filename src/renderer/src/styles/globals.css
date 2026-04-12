@@ -184,6 +184,20 @@ body {
   height: 0;
 }
 
+/* Timer stroke pulse-out */
+@keyframes timer-pulse-out {
+  0% {
+    stroke-width: 2;
+    opacity: 1;
+    filter: blur(0px);
+  }
+  100% {
+    stroke-width: 10;
+    opacity: 0;
+    filter: blur(6px);
+  }
+}
+
 /* Hide scrollbars globally */
 ::-webkit-scrollbar {
   display: none;
