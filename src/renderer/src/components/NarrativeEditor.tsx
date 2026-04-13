@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useCallback, memo } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
@@ -27,16 +27,14 @@ function isImmediateFlushReason(r: PersistReason): boolean {
   return r === 'manual' || r === 'visibility' || r === 'pagehide' || r === 'flush-after'
 }
 
-export default function NarrativeEditor({
+export default memo(function NarrativeEditor({
   activeNarrativeId,
   onNarrativeIdAssigned,
   reloadKey = 0
 }: NarrativeEditorProps) {
   const loadGenerationRef = useRef(0)
   const scrollRef = useRef<HTMLDivElement | null>(null)
-  const rafRef = useRef<number | null>(null)
-  const suspendUntilRef = useRef(0)
-  const programmaticScrollRef = useRef(false)
+  const lastCaretYRef = useRef<number>(-1)
 
   const activeNarrativeIdRef = useRef(activeNarrativeId)
   activeNarrativeIdRef.current = activeNarrativeId
@@ -87,7 +85,7 @@ export default function NarrativeEditor({
     editorProps: {
       attributes: {
         class: 'focus:outline-none min-h-full'
-      }
+      },
     }
   })
 
@@ -157,60 +155,9 @@ export default function NarrativeEditor({
 
   runPersistRef.current = runPersist
 
-  const adjustCaretToAnchor = useCallback((force = false) => {
-    if (!editor) return
-
-    const container = scrollRef.current
-    if (!container) return
-
-    if (!force && Date.now() < suspendUntilRef.current) return
-
-    const styles = getComputedStyle(container)
-    const anchorRatio = Number.parseFloat(styles.getPropertyValue('--editor-anchor-ratio')) || 0.5
-    const deadZone = Number.parseFloat(styles.getPropertyValue('--editor-anchor-dead-zone')) || 24
-
-    try {
-      const caret = editor.view.coordsAtPos(editor.state.selection.from)
-      const containerRect = container.getBoundingClientRect()
-      const caretY = caret.top - containerRect.top + container.scrollTop
-      const targetY = container.scrollTop + container.clientHeight * anchorRatio
-      const drift = caretY - targetY
-
-      if (drift <= deadZone) return
-
-      const maxScrollTop = container.scrollHeight - container.clientHeight
-      const nextScrollTop = Math.min(maxScrollTop, container.scrollTop + drift - deadZone)
-      if (nextScrollTop <= container.scrollTop) return
-
-      programmaticScrollRef.current = true
-      container.scrollTop = nextScrollTop
-
-      window.requestAnimationFrame(() => {
-        programmaticScrollRef.current = false
-      })
-    } catch {
-      // Selection can be transiently invalid during document updates.
-    }
-  }, [editor])
-
-  const scheduleAnchor = useCallback(
-    (force = false) => {
-      if (rafRef.current) {
-        window.cancelAnimationFrame(rafRef.current)
-      }
-
-      rafRef.current = window.requestAnimationFrame(() => {
-        rafRef.current = null
-        adjustCaretToAnchor(force)
-      })
-    },
-    [adjustCaretToAnchor]
-  )
-
   const scrollEditorToTopAndFocusEnd = useCallback(() => {
     const container = scrollRef.current
     if (container) container.scrollTop = 0
-    suspendUntilRef.current = Date.now() + 2500
     editor?.commands.focus('end')
     window.requestAnimationFrame(() => {
       const el = scrollRef.current
@@ -233,25 +180,25 @@ export default function NarrativeEditor({
     async function loadDocumentForActiveId() {
       if (activeNarrativeId === null) {
         editor.commands.setContent('')
-        scrollEditorToTopAndFocusEnd()
-        scheduleAnchor(false)
-        lastPersistTimeRef.current = Date.now()
-        return
-      }
+    scrollEditorToTopAndFocusEnd()
+    lastCaretYRef.current = -1
+    lastPersistTimeRef.current = Date.now()
+    return
+    }
 
-      const narrative = await getNarrative(activeNarrativeId)
+    const narrative = await getNarrative(activeNarrativeId)
 
-      if (generation !== loadGenerationRef.current) return
+    if (generation !== loadGenerationRef.current) return
 
-      if (narrative?.content != null) {
-        editor.commands.setContent(narrative.content)
-      } else {
-        editor.commands.setContent('')
-      }
+    if (narrative?.content != null) {
+      editor.commands.setContent(narrative.content)
+    } else {
+      editor.commands.setContent('')
+    }
 
-      scrollEditorToTopAndFocusEnd()
-      scheduleAnchor(false)
-      lastPersistTimeRef.current = Date.now()
+    scrollEditorToTopAndFocusEnd()
+    lastCaretYRef.current = -1
+    lastPersistTimeRef.current = Date.now()
     }
 
     loadDocumentForActiveId()
@@ -259,7 +206,6 @@ export default function NarrativeEditor({
     editor,
     activeNarrativeId,
     reloadKey,
-    scheduleAnchor,
     scrollEditorToTopAndFocusEnd,
     clearAutosaveDebounce
   ])
@@ -268,8 +214,30 @@ export default function NarrativeEditor({
     if (!editor) return
 
     const handleDocumentUpdate = () => {
-      suspendUntilRef.current = 0
-      scheduleAnchor(true)
+      const sel = editor.state.selection
+      const coords = editor.view.coordsAtPos(sel.from)
+      const currentY = coords.top
+      const container = scrollRef.current
+
+      if (container) {
+        const absY = currentY + container.scrollTop
+        const midpoint = container.getBoundingClientRect().top + container.clientHeight * 0.5
+        const lastAbsY = lastCaretYRef.current
+        const movedDown = lastAbsY >= 0 && absY > lastAbsY + 2
+
+        const doc = editor.state.doc
+        const lastNode = doc.lastChild
+        const inLastNode = lastNode ? sel.from >= doc.content.size - lastNode.nodeSize : false
+
+        const belowMidpoint = currentY > midpoint
+
+        if (movedDown && belowMidpoint && inLastNode) {
+          const overshoot = currentY - midpoint
+          container.scrollBy({ top: overshoot, behavior: 'instant' })
+        }
+
+        lastCaretYRef.current = absY
+      }
 
       if (inFlightRef.current) {
         dirtyDuringFlightRef.current = true
@@ -285,33 +253,12 @@ export default function NarrativeEditor({
       }
     }
 
-    const handleSelectionUpdate = () => {
-      scheduleAnchor(false)
-    }
-
     editor.on('update', handleDocumentUpdate)
-    editor.on('selectionUpdate', handleSelectionUpdate)
-
-    scheduleAnchor(false)
 
     return () => {
       editor.off('update', handleDocumentUpdate)
-      editor.off('selectionUpdate', handleSelectionUpdate)
     }
-  }, [editor, scheduleAnchor, scheduleDebouncedAutosave, clearAutosaveDebounce])
-
-  useEffect(() => {
-    const container = scrollRef.current
-    if (!container) return
-
-    function handleScroll() {
-      if (programmaticScrollRef.current) return
-      suspendUntilRef.current = Date.now() + 1200
-    }
-
-    container.addEventListener('scroll', handleScroll, { passive: true })
-    return () => container.removeEventListener('scroll', handleScroll)
-  }, [])
+  }, [editor, scheduleDebouncedAutosave, clearAutosaveDebounce])
 
   useEffect(() => {
     function onVisibilityChange() {
@@ -356,9 +303,6 @@ export default function NarrativeEditor({
   useEffect(() => {
     return () => {
       clearAutosaveDebounce()
-      if (rafRef.current) {
-        window.cancelAnimationFrame(rafRef.current)
-      }
     }
   }, [clearAutosaveDebounce])
 
@@ -389,4 +333,4 @@ export default function NarrativeEditor({
       </div>
     </div>
   )
-}
+})

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { PlayIcon, PauseIcon, StopIcon } from '@heroicons/react/24/solid'
 
 type TimerState = 'idle' | 'running' | 'paused'
@@ -102,7 +102,7 @@ export default function TimerPopover({ open, onClose, anchorRef, onTimerStateCha
     return () => clearTimer()
   }, [clearTimer])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open || !anchorRef.current) return
 
     const rect = anchorRef.current.getBoundingClientRect()
