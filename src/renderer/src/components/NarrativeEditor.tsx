@@ -10,9 +10,12 @@ import { deriveNarrativeTitleFromContent } from '../lib/deriveNarrativeTitle'
 import { getNarrative, updateDraft } from '../lib/narrativeStore'
 import {
   readAnchorSnapshot,
+  readAnchorConfig,
+  computeMidpoint,
   shouldAnchor,
   detectLineAdvance,
-  applyAnchor
+  applyAnchor,
+  type AnchorConfig
 } from '../lib/caretAnchor'
 
 export type NarrativeEditorProps = {
@@ -41,6 +44,8 @@ export default memo(function NarrativeEditor({
   const loadGenerationRef = useRef(0)
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const lastCaretYRef = useRef<number>(-1)
+  const cachedAnchorConfigRef = useRef<AnchorConfig | null>(null)
+  const cachedMidpointRef = useRef<number | null>(null)
 
   const activeNarrativeIdRef = useRef(activeNarrativeId)
   activeNarrativeIdRef.current = activeNarrativeId
@@ -223,7 +228,18 @@ export default memo(function NarrativeEditor({
       const container = scrollRef.current
 
       if (container) {
-        const snapshot = readAnchorSnapshot(editor, container)
+        let config = cachedAnchorConfigRef.current
+        if (!config) {
+          config = readAnchorConfig(container)
+          cachedAnchorConfigRef.current = config
+        }
+        let midpoint = cachedMidpointRef.current
+        if (midpoint == null) {
+          midpoint = computeMidpoint(container, config)
+          cachedMidpointRef.current = midpoint
+        }
+
+        const snapshot = readAnchorSnapshot(editor, container, config, midpoint)
         const lastAbsY = lastCaretYRef.current
 
         if (
@@ -257,6 +273,35 @@ export default memo(function NarrativeEditor({
       editor.off('update', handleDocumentUpdate)
     }
   }, [editor, scheduleDebouncedAutosave, clearAutosaveDebounce])
+
+  useEffect(() => {
+    const container = scrollRef.current
+    if (!container) return
+
+    const refreshAnchorCache = () => {
+      const config = readAnchorConfig(container)
+      cachedAnchorConfigRef.current = config
+      cachedMidpointRef.current = computeMidpoint(container, config)
+    }
+
+    refreshAnchorCache()
+
+    const resizeObserver = new ResizeObserver(refreshAnchorCache)
+    resizeObserver.observe(container)
+    const offsetParent = container.offsetParent
+    if (offsetParent instanceof Element) {
+      resizeObserver.observe(offsetParent)
+    }
+
+    window.addEventListener('resize', refreshAnchorCache)
+    document.addEventListener('anchor:invalidate', refreshAnchorCache)
+
+    return () => {
+      resizeObserver.disconnect()
+      window.removeEventListener('resize', refreshAnchorCache)
+      document.removeEventListener('anchor:invalidate', refreshAnchorCache)
+    }
+  }, [])
 
   useEffect(() => {
     function onVisibilityChange() {

@@ -9,26 +9,66 @@ export type AnchorSnapshot = {
   lineHeight: number
 }
 
+export type AnchorConfig = {
+  anchorRatio: number
+  deadZone: number
+}
+
+const DEFAULT_ANCHOR_RATIO = 0.5
+const DEFAULT_DEAD_ZONE = 0
+
+/**
+ * Reads anchor configuration from CSS custom properties on the container.
+ * Falls back to hardcoded defaults if vars are absent or unparseable.
+ */
+export function readAnchorConfig(container: HTMLElement): AnchorConfig {
+  const cs = getComputedStyle(container)
+
+  const rawRatio = cs.getPropertyValue('--editor-anchor-ratio').trim()
+  const parsedRatio = parseFloat(rawRatio)
+  const anchorRatio =
+    Number.isFinite(parsedRatio) && parsedRatio > 0 ? parsedRatio : DEFAULT_ANCHOR_RATIO
+
+  const rawDeadZone = cs.getPropertyValue('--editor-anchor-dead-zone').trim()
+  const parsedDeadZone = parseFloat(rawDeadZone)
+  const deadZone =
+    Number.isFinite(parsedDeadZone) && parsedDeadZone >= 0 ? parsedDeadZone : DEFAULT_DEAD_ZONE
+
+  return { anchorRatio, deadZone }
+}
+
+/**
+ * Computes the viewport-relative midpoint Y that the anchor targets.
+ * Callers cache this value and invalidate on resize / invalidation events
+ * rather than recomputing per keystroke.
+ */
+export function computeMidpoint(container: HTMLElement, config: AnchorConfig): number {
+  const rect = container.getBoundingClientRect()
+  return rect.top + container.clientHeight * config.anchorRatio
+}
+
 /**
  * Reads a snapshot of the current caret position and container geometry.
  *
- * Performs exactly one `coordsAtPos` call and one `getBoundingClientRect`
- * call per invocation (same cost as the original inline implementation).
+ * Performs exactly one `coordsAtPos` call per invocation. The `midpoint`
+ * is passed in (cached by the caller) rather than recomputed, to avoid
+ * a layout-forcing `getBoundingClientRect` on every keystroke.
  */
-export function readAnchorSnapshot(editor: Editor, container: HTMLElement): AnchorSnapshot {
+export function readAnchorSnapshot(
+  editor: Editor,
+  container: HTMLElement,
+  _config: AnchorConfig,
+  midpoint: number
+): AnchorSnapshot {
   const selection = editor.state.selection
   const selFrom = selection.from
   const caretY = editor.view.coordsAtPos(selFrom).top
   const absY = caretY + container.scrollTop
-  const rect = container.getBoundingClientRect()
-  const midpoint = rect.top + container.clientHeight * 0.5
 
   const doc = editor.state.doc
   const lastNode = doc.lastChild
   const inLastNode = lastNode ? selFrom >= doc.content.size - lastNode.nodeSize : false
 
-  // Resolve a line height from the ProseMirror element's computed style.
-  // Not used in Step 1; included so future steps don't have to reshape the type.
   let lineHeight = 0
   const proseMirrorEl = container.querySelector('.ProseMirror') as HTMLElement | null
   if (proseMirrorEl) {
