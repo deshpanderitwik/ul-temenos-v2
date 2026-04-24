@@ -8,6 +8,12 @@ import {
 } from '../lib/autosaveConfig'
 import { deriveNarrativeTitleFromContent } from '../lib/deriveNarrativeTitle'
 import { getNarrative, updateDraft } from '../lib/narrativeStore'
+import {
+  readAnchorSnapshot,
+  shouldAnchor,
+  detectLineAdvance,
+  applyAnchor
+} from '../lib/caretAnchor'
 
 export type NarrativeEditorProps = {
   activeNarrativeId: string | null
@@ -214,29 +220,21 @@ export default memo(function NarrativeEditor({
     if (!editor) return
 
     const handleDocumentUpdate = () => {
-      const sel = editor.state.selection
-      const coords = editor.view.coordsAtPos(sel.from)
-      const currentY = coords.top
       const container = scrollRef.current
 
       if (container) {
-        const absY = currentY + container.scrollTop
-        const midpoint = container.getBoundingClientRect().top + container.clientHeight * 0.5
+        const snapshot = readAnchorSnapshot(editor, container)
         const lastAbsY = lastCaretYRef.current
-        const movedDown = lastAbsY >= 0 && absY > lastAbsY + 2
 
-        const doc = editor.state.doc
-        const lastNode = doc.lastChild
-        const inLastNode = lastNode ? sel.from >= doc.content.size - lastNode.nodeSize : false
-
-        const belowMidpoint = currentY > midpoint
-
-        if (movedDown && belowMidpoint && inLastNode) {
-          const overshoot = currentY - midpoint
-          container.scrollBy({ top: overshoot, behavior: 'instant' })
+        if (
+          detectLineAdvance(snapshot, lastAbsY) &&
+          snapshot.caretY > snapshot.midpoint &&
+          shouldAnchor(snapshot)
+        ) {
+          applyAnchor(container, snapshot.caretY - snapshot.midpoint)
         }
 
-        lastCaretYRef.current = absY
+        lastCaretYRef.current = snapshot.absY
       }
 
       if (inFlightRef.current) {
