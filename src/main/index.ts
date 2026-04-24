@@ -1,4 +1,5 @@
 import { app, BrowserWindow } from 'electron'
+import { autoUpdater } from 'electron-updater'
 import { join } from 'path'
 import { ensureStoreDir } from './store'
 import { registerIpcHandlers, startFileWatcher, stopFileWatcher } from './ipc'
@@ -36,6 +37,12 @@ app.whenReady().then(() => {
   startFileWatcher()
   startSync()
   createWindow()
+
+  if (app.isPackaged) {
+    autoUpdater.checkForUpdatesAndNotify().catch((err) => {
+      console.error('Auto-update check failed:', err)
+    })
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
