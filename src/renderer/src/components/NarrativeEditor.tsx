@@ -86,7 +86,9 @@ export default memo(function NarrativeEditor({
 
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      StarterKit.configure({
+        orderedList: false
+      }),
       Placeholder.configure({
         placeholder: 'Start writing...'
       })
