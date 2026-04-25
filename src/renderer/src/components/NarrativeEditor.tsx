@@ -45,7 +45,6 @@ export default memo(function NarrativeEditor({
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const lastCaretYRef = useRef<number>(-1)
   const cachedAnchorConfigRef = useRef<AnchorConfig | null>(null)
-  const cachedMidpointRef = useRef<number | null>(null)
 
   const activeNarrativeIdRef = useRef(activeNarrativeId)
   activeNarrativeIdRef.current = activeNarrativeId
@@ -233,11 +232,7 @@ export default memo(function NarrativeEditor({
           config = readAnchorConfig(container)
           cachedAnchorConfigRef.current = config
         }
-        let midpoint = cachedMidpointRef.current
-        if (midpoint == null) {
-          midpoint = computeMidpoint(container, config)
-          cachedMidpointRef.current = midpoint
-        }
+        const midpoint = computeMidpoint(container, config)
 
         const snapshot = readAnchorSnapshot(editor, container, config, midpoint)
         const lastAbsY = lastCaretYRef.current
@@ -279,9 +274,7 @@ export default memo(function NarrativeEditor({
     if (!container) return
 
     const refreshAnchorCache = () => {
-      const config = readAnchorConfig(container)
-      cachedAnchorConfigRef.current = config
-      cachedMidpointRef.current = computeMidpoint(container, config)
+      cachedAnchorConfigRef.current = readAnchorConfig(container)
     }
 
     refreshAnchorCache()
