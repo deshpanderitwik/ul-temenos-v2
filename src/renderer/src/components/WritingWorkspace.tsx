@@ -13,7 +13,6 @@ export default function WritingWorkspace() {
   const [narrativesModalOpen, setNarrativesModalOpen] = useState(false)
   const [activeNarrativeId, setActiveNarrativeId] = useState<string | null>(null)
   const [creatingNarrative, setCreatingNarrative] = useState(false)
-  const [editorReloadKey, setEditorReloadKey] = useState(0)
   const creatingLockRef = useRef(false)
   const activeNarrativeIdRef = useRef(activeNarrativeId)
   activeNarrativeIdRef.current = activeNarrativeId
@@ -54,10 +53,6 @@ export default function WritingWorkspace() {
       const parts = filename.split('/')
       const narrativeId = parts[1] ?? null
 
-      if (narrativeId && narrativeId === activeNarrativeIdRef.current) {
-        setEditorReloadKey((k) => k + 1)
-      }
-
       if (!activeNarrativeIdRef.current && narrativeId) {
         void (async () => {
           const id = await getLatestNarrativeId()
@@ -79,7 +74,6 @@ export default function WritingWorkspace() {
         <NarrativeEditor
           activeNarrativeId={activeNarrativeId}
           onNarrativeIdAssigned={setActiveNarrativeId}
-          reloadKey={editorReloadKey}
         />
       </main>
 
