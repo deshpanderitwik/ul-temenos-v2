@@ -8,15 +8,6 @@ import {
 } from '../lib/autosaveConfig'
 import { deriveNarrativeTitleFromContent } from '../lib/deriveNarrativeTitle'
 import { getNarrative, updateDraft } from '../lib/narrativeStore'
-import {
-  readAnchorSnapshot,
-  readAnchorConfig,
-  computeMidpoint,
-  shouldAnchor,
-  detectLineAdvance,
-  applyAnchor,
-  type AnchorConfig
-} from '../lib/caretAnchor'
 
 export type NarrativeEditorProps = {
   activeNarrativeId: string | null
@@ -43,8 +34,6 @@ export default memo(function NarrativeEditor({
 }: NarrativeEditorProps) {
   const loadGenerationRef = useRef(0)
   const scrollRef = useRef<HTMLDivElement | null>(null)
-  const lastCaretYRef = useRef<number>(-1)
-  const cachedAnchorConfigRef = useRef<AnchorConfig | null>(null)
 
   const activeNarrativeIdRef = useRef(activeNarrativeId)
   activeNarrativeIdRef.current = activeNarrativeId
@@ -192,25 +181,23 @@ export default memo(function NarrativeEditor({
     async function loadDocumentForActiveId() {
       if (activeNarrativeId === null) {
         editor.commands.setContent('')
-    scrollEditorToTopAndFocusEnd()
-    lastCaretYRef.current = -1
-    lastPersistTimeRef.current = Date.now()
-    return
-    }
+        scrollEditorToTopAndFocusEnd()
+        lastPersistTimeRef.current = Date.now()
+        return
+      }
 
-    const narrative = await getNarrative(activeNarrativeId)
+      const narrative = await getNarrative(activeNarrativeId)
 
-    if (generation !== loadGenerationRef.current) return
+      if (generation !== loadGenerationRef.current) return
 
-    if (narrative?.content != null) {
-      editor.commands.setContent(narrative.content)
-    } else {
-      editor.commands.setContent('')
-    }
+      if (narrative?.content != null) {
+        editor.commands.setContent(narrative.content)
+      } else {
+        editor.commands.setContent('')
+      }
 
-    scrollEditorToTopAndFocusEnd()
-    lastCaretYRef.current = -1
-    lastPersistTimeRef.current = Date.now()
+      scrollEditorToTopAndFocusEnd()
+      lastPersistTimeRef.current = Date.now()
     }
 
     loadDocumentForActiveId()
@@ -226,30 +213,6 @@ export default memo(function NarrativeEditor({
     if (!editor) return
 
     const handleDocumentUpdate = () => {
-      const container = scrollRef.current
-
-      if (container) {
-        let config = cachedAnchorConfigRef.current
-        if (!config) {
-          config = readAnchorConfig(container)
-          cachedAnchorConfigRef.current = config
-        }
-        const midpoint = computeMidpoint(container, config)
-
-        const snapshot = readAnchorSnapshot(editor, container, config, midpoint)
-        const lastAbsY = lastCaretYRef.current
-
-        if (
-          detectLineAdvance(snapshot, lastAbsY) &&
-          snapshot.caretY > snapshot.midpoint &&
-          shouldAnchor(snapshot)
-        ) {
-          applyAnchor(container, snapshot.caretY - snapshot.midpoint)
-        }
-
-        lastCaretYRef.current = snapshot.absY
-      }
-
       if (inFlightRef.current) {
         dirtyDuringFlightRef.current = true
         return
@@ -270,33 +233,6 @@ export default memo(function NarrativeEditor({
       editor.off('update', handleDocumentUpdate)
     }
   }, [editor, scheduleDebouncedAutosave, clearAutosaveDebounce])
-
-  useEffect(() => {
-    const container = scrollRef.current
-    if (!container) return
-
-    const refreshAnchorCache = () => {
-      cachedAnchorConfigRef.current = readAnchorConfig(container)
-    }
-
-    refreshAnchorCache()
-
-    const resizeObserver = new ResizeObserver(refreshAnchorCache)
-    resizeObserver.observe(container)
-    const offsetParent = container.offsetParent
-    if (offsetParent instanceof Element) {
-      resizeObserver.observe(offsetParent)
-    }
-
-    window.addEventListener('resize', refreshAnchorCache)
-    document.addEventListener('anchor:invalidate', refreshAnchorCache)
-
-    return () => {
-      resizeObserver.disconnect()
-      window.removeEventListener('resize', refreshAnchorCache)
-      document.removeEventListener('anchor:invalidate', refreshAnchorCache)
-    }
-  }, [])
 
   useEffect(() => {
     function onVisibilityChange() {
