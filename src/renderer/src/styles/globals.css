@@ -47,6 +47,8 @@
 :root {
   --font-ui: 'Work Sans Variable', sans-serif;
   --font-editor: 'Joly Text', Georgia, serif;
+  --editor-anchor-ratio: 0.5;
+  --editor-anchor-dead-zone: 24px;
   --editor-top-space: clamp(72px, 10vh, 48px);
   --editor-bottom-space: clamp(38vh, 50vh, 60vh);
   /* AppModal.tsx — tweak insets here (px or rem). */
