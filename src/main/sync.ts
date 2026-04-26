@@ -43,23 +43,30 @@ async function pushNarrative(narrativeId: string): Promise<void> {
   const { data: { user } } = await sb.auth.getUser()
   if (!user) return
 
+  // Break the FK cycle between narratives.active_draft_id and drafts.narrative_id:
+  // upsert the narrative row first with active_draft_id null, then the draft, then
+  // patch active_draft_id. A straight upsert with active_draft_id set fails with
+  // narratives_active_draft_id_fkey when the draft doesn't yet exist remotely.
   const { error: narrativeError } = await sb.from('narratives').upsert({
     id: meta.id,
     user_id: user.id,
     title: meta.title,
-    active_draft_id: meta.activeDraftId,
+    active_draft_id: null,
     tags: meta.tags,
     created_at: meta.createdAt,
     updated_at: meta.updatedAt
   }, { onConflict: 'id' })
 
-  if (narrativeError) return
+  if (narrativeError) {
+    console.error('[sync] pushNarrative: narrative upsert failed', narrativeError)
+    return
+  }
 
   const dp = draftPath(narrativeId, meta.activeDraftId)
   const draft = readJson<Draft>(dp)
   if (!draft) return
 
-  await sb.from('drafts').upsert({
+  const { error: draftError } = await sb.from('drafts').upsert({
     id: draft.id,
     narrative_id: draft.narrativeId,
     parent_draft_id: draft.parentDraftId,
@@ -68,6 +75,20 @@ async function pushNarrative(narrativeId: string): Promise<void> {
     created_at: draft.createdAt,
     updated_at: draft.updatedAt
   }, { onConflict: 'id' })
+
+  if (draftError) {
+    console.error('[sync] pushNarrative: draft upsert failed', draftError)
+    return
+  }
+
+  const { error: linkError } = await sb
+    .from('narratives')
+    .update({ active_draft_id: meta.activeDraftId })
+    .eq('id', meta.id)
+
+  if (linkError) {
+    console.error('[sync] pushNarrative: active_draft_id link failed', linkError)
+  }
 }
 
 async function pushDelete(narrativeId: string): Promise<void> {
@@ -161,6 +182,10 @@ async function pullFromRemote(): Promise<void> {
           updatedAt: d.updated_at
         }))
       })
+    } else if (localTime > remoteTime) {
+      // Local is newer than remote — a previous push must have failed silently
+      // (FK error, network blip, etc.). Re-enqueue so it gets pushed this cycle.
+      pushNarrative(rn.id).catch(() => {})
     }
   }
 
