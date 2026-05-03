@@ -25,16 +25,27 @@ function loadEnv(): Record<string, string> {
   return vars
 }
 
-function getEnvVar(key: string, env: Record<string, string>): string | undefined {
-  return process.env[key] ?? env[key]
+function getEnvVar(
+  keys: string | string[],
+  env: Record<string, string>
+): string | undefined {
+  const candidates = Array.isArray(keys) ? keys : [keys]
+  for (const k of candidates) {
+    const v = process.env[k] ?? env[k]
+    if (v) return v
+  }
+  return undefined
 }
 
 export function getSupabaseClient(): SupabaseClient | null {
   if (client) return client
 
   const env = loadEnv()
-  const url = getEnvVar('VITE_SUPABASE_URL', env)
-  const anonKey = getEnvVar('VITE_SUPABASE_ANON_KEY', env)
+  const url = getEnvVar(['SUPABASE_URL', 'VITE_SUPABASE_URL'], env)
+  const anonKey = getEnvVar(
+    ['SUPABASE_ANON_KEY', 'VITE_SUPABASE_ANON_KEY'],
+    env
+  )
 
   if (!url || !anonKey) return null
 
@@ -54,8 +65,17 @@ export function getSupabaseClient(): SupabaseClient | null {
 
 async function signInFromEnv(sb: SupabaseClient): Promise<boolean> {
   const env = loadEnv()
-  const email = getEnvVar('VITE_SUPABASE_USER_EMAIL', env)
-  const password = getEnvVar('VITE_SUPABASE_USER_PASSWORD', env)
+  // Prefer non-VITE_ names for credentials so they can never be inlined
+  // into the renderer bundle by Vite. The VITE_-prefixed forms remain
+  // accepted for backward compatibility with older .env files.
+  const email = getEnvVar(
+    ['SUPABASE_USER_EMAIL', 'VITE_SUPABASE_USER_EMAIL'],
+    env
+  )
+  const password = getEnvVar(
+    ['SUPABASE_USER_PASSWORD', 'VITE_SUPABASE_USER_PASSWORD'],
+    env
+  )
   if (!email || !password) {
     console.error('[supabase] no credentials in env')
     return false
