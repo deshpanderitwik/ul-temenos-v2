@@ -1,9 +1,10 @@
 import { app, BrowserWindow } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import { join } from 'path'
-import { ensureStoreDir } from './store'
-import { registerIpcHandlers, startFileWatcher, stopFileWatcher } from './ipc'
 import { startSync, stopSync, syncNow } from './sync'
+import { initDb, closeDb, getDbPath } from './yjs/db'
+import { registerYjsIpcHandlers } from './yjs/ipc'
+import { migrateLegacyNarratives, summarizeReport } from './yjs/migrate'
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -32,9 +33,17 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
-  ensureStoreDir()
-  registerIpcHandlers()
-  startFileWatcher()
+  initDb()
+  console.log('[temenos] sqlite ready at', getDbPath())
+  try {
+    const report = migrateLegacyNarratives()
+    if (report.results.length > 0) {
+      console.log(summarizeReport(report))
+    }
+  } catch (err) {
+    console.error('[temenos] migration crashed (non-fatal):', err)
+  }
+  registerYjsIpcHandlers()
   startSync()
   createWindow()
 
@@ -51,6 +60,6 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   stopSync()
-  stopFileWatcher()
+  closeDb()
   if (process.platform !== 'darwin') app.quit()
 })

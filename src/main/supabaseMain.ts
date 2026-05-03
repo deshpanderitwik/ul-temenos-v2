@@ -3,8 +3,9 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { app } from 'electron'
 
+const REFRESH_MARGIN_MS = 60_000
+
 let client: SupabaseClient | null = null
-let authenticated = false
 
 function loadEnv(): Record<string, string> {
   const vars: Record<string, string> = {}
@@ -37,29 +38,52 @@ export function getSupabaseClient(): SupabaseClient | null {
 
   if (!url || !anonKey) return null
 
-  client = createClient(url, anonKey)
+  client = createClient(url, anonKey, {
+    auth: {
+      autoRefreshToken: true,
+      persistSession: false
+    }
+  })
+
+  client.auth.onAuthStateChange((event) => {
+    console.log('[supabase] auth event:', event)
+  })
+
   return client
+}
+
+async function signInFromEnv(sb: SupabaseClient): Promise<boolean> {
+  const env = loadEnv()
+  const email = getEnvVar('VITE_SUPABASE_USER_EMAIL', env)
+  const password = getEnvVar('VITE_SUPABASE_USER_PASSWORD', env)
+  if (!email || !password) {
+    console.error('[supabase] no credentials in env')
+    return false
+  }
+  const { error } = await sb.auth.signInWithPassword({ email, password })
+  if (error) {
+    console.error('[supabase] sign-in failed:', error.message)
+    return false
+  }
+  return true
 }
 
 export async function ensureAuthenticated(): Promise<SupabaseClient | null> {
   const sb = getSupabaseClient()
   if (!sb) return null
-  if (authenticated) return sb
 
   const { data: { session } } = await sb.auth.getSession()
-  if (session) {
-    authenticated = true
+
+  if (session?.expires_at && session.expires_at * 1000 > Date.now() + REFRESH_MARGIN_MS) {
     return sb
   }
 
-  const env = loadEnv()
-  const email = getEnvVar('VITE_SUPABASE_USER_EMAIL', env)
-  const password = getEnvVar('VITE_SUPABASE_USER_PASSWORD', env)
-  if (!email || !password) return null
+  if (session) {
+    const { data, error } = await sb.auth.refreshSession()
+    if (!error && data.session) return sb
+    console.warn('[supabase] refresh failed, will re-sign-in:', error?.message)
+  }
 
-  const { error } = await sb.auth.signInWithPassword({ email, password })
-  if (error) return null
-
-  authenticated = true
-  return sb
+  const ok = await signInFromEnv(sb)
+  return ok ? sb : null
 }

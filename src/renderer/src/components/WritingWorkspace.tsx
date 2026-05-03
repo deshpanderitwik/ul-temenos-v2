@@ -1,21 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { createNarrative, getLatestNarrativeId, onExternalChange } from '../lib/narrativeStore'
+import { createNarrative, getLatestNarrativeId } from '../lib/narrativeStore'
 import NarrativeEditor from './NarrativeEditor'
 import NarrativesList from './NarrativesList'
 import AppModal from './AppModal'
 import SideRail from './SideRail'
 
-/**
- * Writing surface: full-bleed editor (centered column in CSS) with a fixed primary
- * rail that does not consume horizontal space. Modals are owned here.
- */
 export default function WritingWorkspace() {
   const [narrativesModalOpen, setNarrativesModalOpen] = useState(false)
   const [activeNarrativeId, setActiveNarrativeId] = useState<string | null>(null)
   const [creatingNarrative, setCreatingNarrative] = useState(false)
   const creatingLockRef = useRef(false)
-  const activeNarrativeIdRef = useRef(activeNarrativeId)
-  activeNarrativeIdRef.current = activeNarrativeId
 
   const createNewNarrative = useCallback(async () => {
     if (creatingLockRef.current) return
@@ -44,22 +38,6 @@ export default function WritingWorkspace() {
     return () => {
       cancelled = true
     }
-  }, [])
-
-  useEffect(() => {
-    return onExternalChange(({ filename }) => {
-      if (!filename) return
-
-      const parts = filename.split('/')
-      const narrativeId = parts[1] ?? null
-
-      if (!activeNarrativeIdRef.current && narrativeId) {
-        void (async () => {
-          const id = await getLatestNarrativeId()
-          if (id) setActiveNarrativeId(id)
-        })()
-      }
-    })
   }, [])
 
   return (

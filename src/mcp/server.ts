@@ -1,14 +1,44 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
-import * as store from '../main/store'
-import { textToTipTapDoc, textToTipTapDocWithTitle, tipTapDocToText, appendToTipTapDoc } from './tiptap-json'
+import { initDb } from '../main/yjs/db'
+import {
+  listNarratives,
+  getNarrative,
+  createNarrative,
+  appendUpdate,
+  loadDoc,
+  updateNarrativeMeta
+} from '../main/yjs/persistence'
+import {
+  textToTipTapDoc,
+  textToTipTapDocWithTitle,
+  tipTapDocToText,
+  appendToTipTapDoc
+} from './tiptap-json'
+import { applyContentReplacement, docToTipTapJSON } from './yjs-mcp-bridge'
 
-store.ensureStoreDir()
+// Initialize the SQLite store at the same path the desktop app uses. The MCP
+// server and app share the file via WAL — concurrent reads are fine, writes
+// serialize via SQLite transactions.
+//
+// If better-sqlite3 fails to load with a NODE_MODULE_VERSION error, the
+// native binary is currently compiled for Electron rather than Node. Run
+// `npm run rebuild:node` once before `npm run mcp:dev`; rerun
+// `npm run rebuild:native` before launching the desktop app again. Turn 8
+// or later will likely consolidate this.
+try {
+  initDb()
+} catch (err) {
+  console.error('[mcp] failed to open SQLite — see comment above for the')
+  console.error('[mcp] native-module rebuild dance. Underlying error:')
+  console.error(err)
+  process.exit(1)
+}
 
 const server = new McpServer({
   name: 'temenos',
-  version: '1.0.0'
+  version: '2.0.0'
 })
 
 server.tool(
@@ -16,11 +46,13 @@ server.tool(
   'List all narratives with their IDs and titles, sorted by most recently updated',
   {},
   async () => {
-    const entries = store.listNarratives()
+    const entries = listNarratives()
     if (entries.length === 0) {
       return { content: [{ type: 'text', text: 'No narratives found.' }] }
     }
-    const lines = entries.map((e) => `• ${e.title}  [id: ${e.id}]  (updated: ${e.updatedAt})`)
+    const lines = entries.map(
+      (e) => `• ${e.title}  [id: ${e.id}]  (updated: ${e.updatedAt})`
+    )
     return { content: [{ type: 'text', text: lines.join('\n') }] }
   }
 )
@@ -30,13 +62,15 @@ server.tool(
   'Get the full content of a narrative by ID',
   { id: z.string().describe('The narrative UUID') },
   async ({ id }) => {
-    const narrative = store.getNarrative(id)
-    if (!narrative) {
+    const meta = getNarrative(id)
+    if (!meta) {
       return { content: [{ type: 'text', text: `Narrative ${id} not found.` }] }
     }
-    const text = tipTapDocToText(narrative.content as Record<string, unknown>)
+    const doc = loadDoc(id)
+    const json = docToTipTapJSON(doc)
+    const text = tipTapDocToText(json as Record<string, unknown>)
     return {
-      content: [{ type: 'text', text: `# ${narrative.title}\n\n${text}` }]
+      content: [{ type: 'text', text: `# ${meta.title}\n\n${text}` }]
     }
   }
 )
@@ -45,27 +79,38 @@ server.tool(
   'create_narrative',
   'Create a new narrative with optional title and content',
   {
-    title: z.string().optional().describe('Title for the narrative (default: "Untitled")'),
+    title: z
+      .string()
+      .optional()
+      .describe('Title for the narrative (default: "Untitled")'),
     content: z.string().optional().describe('Initial text content for the narrative')
   },
   async ({ title, content }) => {
     const narrativeTitle = title ?? 'Untitled'
-    const { narrativeId } = store.createNarrative(narrativeTitle)
+    const created = createNarrative({ title: narrativeTitle })
 
-    const doc = title && content
-      ? textToTipTapDocWithTitle(title, content)
-      : title
-        ? textToTipTapDocWithTitle(title, '')
-        : content
-          ? textToTipTapDoc(content)
-          : null
+    const initialJson =
+      title && content
+        ? textToTipTapDocWithTitle(title, content)
+        : title
+          ? textToTipTapDocWithTitle(title, '')
+          : content
+            ? textToTipTapDoc(content)
+            : null
 
-    if (doc) {
-      store.updateDraft(narrativeId, doc, narrativeTitle)
+    if (initialJson) {
+      const doc = loadDoc(created.id)
+      const update = applyContentReplacement(doc, initialJson)
+      appendUpdate(created.id, update)
     }
 
     return {
-      content: [{ type: 'text', text: `Created narrative "${narrativeTitle}" with id: ${narrativeId}` }]
+      content: [
+        {
+          type: 'text',
+          text: `Created narrative "${narrativeTitle}" with id: ${created.id}`
+        }
+      ]
     }
   }
 )
@@ -78,19 +123,22 @@ server.tool(
     content: z.string().describe('Text content to append')
   },
   async ({ id, content }) => {
-    const narrative = store.getNarrative(id)
-    if (!narrative) {
+    const meta = getNarrative(id)
+    if (!meta) {
       return { content: [{ type: 'text', text: `Narrative ${id} not found.` }] }
     }
 
-    const updatedDoc = appendToTipTapDoc(
-      narrative.content as Record<string, unknown>,
+    const doc = loadDoc(id)
+    const currentJson = docToTipTapJSON(doc)
+    const updatedJson = appendToTipTapDoc(
+      currentJson as Record<string, unknown>,
       content
     )
-    store.updateDraft(id, updatedDoc, narrative.title)
+    const update = applyContentReplacement(doc, updatedJson)
+    appendUpdate(id, update)
 
     return {
-      content: [{ type: 'text', text: `Appended content to "${narrative.title}"` }]
+      content: [{ type: 'text', text: `Appended content to "${meta.title}"` }]
     }
   }
 )
@@ -104,16 +152,24 @@ server.tool(
     content: z.string().describe('New text content (replaces existing content)')
   },
   async ({ id, title, content }) => {
-    const narrative = store.getNarrative(id)
-    if (!narrative) {
+    const meta = getNarrative(id)
+    if (!meta) {
       return { content: [{ type: 'text', text: `Narrative ${id} not found.` }] }
     }
 
-    const doc = textToTipTapDoc(content)
-    store.updateDraft(id, doc, title ?? narrative.title)
+    const newJson = textToTipTapDoc(content)
+    const doc = loadDoc(id)
+    const update = applyContentReplacement(doc, newJson)
+    appendUpdate(id, update)
+
+    if (title && title !== meta.title) {
+      updateNarrativeMeta(id, { title })
+    }
 
     return {
-      content: [{ type: 'text', text: `Updated "${title ?? narrative.title}"` }]
+      content: [
+        { type: 'text', text: `Updated "${title ?? meta.title}"` }
+      ]
     }
   }
 )

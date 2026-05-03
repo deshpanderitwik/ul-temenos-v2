@@ -8,8 +8,12 @@
     "build": "electron-vite build",
     "dist": "electron-vite build && electron-builder --mac --publish never",
     "publish": "electron-vite build && electron-builder --mac --publish always",
-    "test": "tsx --test src/renderer/src/lib/autosaveConfig.test.ts",
-    "mcp:dev": "tsx src/mcp/server.ts"
+    "test": "npm rebuild better-sqlite3 && vitest run src/main/yjs src/mcp && npm run rebuild:native",
+    "test:yjs": "npm run test",
+    "mcp:dev": "npm run rebuild:node && tsx src/mcp/server.ts",
+    "rebuild:native": "electron-rebuild -f -w better-sqlite3",
+    "rebuild:node": "npm rebuild better-sqlite3",
+    "postinstall": "electron-rebuild -f -w better-sqlite3"
   },
   "build": {
     "appId": "com.deshpanderitwik.ul-temenos-v2",
@@ -36,19 +40,25 @@
     "@heroicons/react": "^2.2.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@supabase/supabase-js": "^2.100.0",
+    "@tiptap/extension-collaboration": "^3.22.5",
     "@tiptap/extension-placeholder": "^3.20.4",
     "@tiptap/pm": "^3.20.4",
     "@tiptap/react": "^3.20.4",
     "@tiptap/starter-kit": "^3.20.4",
+    "better-sqlite3": "^12.9.0",
     "electron-updater": "^6.3.9",
     "react": "^19.2.4",
-    "react-dom": "^19.2.4"
+    "react-dom": "^19.2.4",
+    "y-prosemirror": "^1.3.7",
+    "yjs": "^13.6.30"
   },
   "devDependencies": {
+    "@electron/rebuild": "^4.0.4",
     "@tailwindcss/vite": "^4.2.2",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^4.7.0",

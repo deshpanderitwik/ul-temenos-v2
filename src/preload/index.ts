@@ -1,22 +1,30 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
 contextBridge.exposeInMainWorld('api', {
-  narratives: {
-    list: () => ipcRenderer.invoke('narratives:list'),
-    get: (id: string) => ipcRenderer.invoke('narratives:get', id),
-    create: (title?: string) => ipcRenderer.invoke('narratives:create', title),
-    updateDraft: (narrativeId: string, content: unknown, title: string) =>
-      ipcRenderer.invoke('narratives:update-draft', narrativeId, content, title),
-    delete: (id: string) => ipcRenderer.invoke('narratives:delete', id),
-    getLatestId: () => ipcRenderer.invoke('narratives:get-latest-id'),
-    import: (items: { id: string; title: string | null; content: unknown; updated_at: string }[]) =>
-      ipcRenderer.invoke('narratives:import', items),
-    hasLocalData: () => ipcRenderer.invoke('narratives:has-local-data'),
-    onExternalChange: (cb: (data: { filename: string }) => void) => {
-      const handler = (_e: Electron.IpcRendererEvent, data: { filename: string }) => cb(data)
-      ipcRenderer.on('narratives:external-change', handler)
+  yjs: {
+    listNarratives: () => ipcRenderer.invoke('yjs:list-narratives'),
+    getNarrative: (id: string) => ipcRenderer.invoke('yjs:get-narrative', id),
+    createNarrative: (opts?: { id?: string; title?: string; tags?: string[] }) =>
+      ipcRenderer.invoke('yjs:create-narrative', opts),
+    deleteNarrative: (id: string) => ipcRenderer.invoke('yjs:delete-narrative', id),
+    updateMeta: (id: string, patch: { title?: string; tags?: string[] }) =>
+      ipcRenderer.invoke('yjs:update-meta', id, patch),
+    loadDocState: (id: string) => ipcRenderer.invoke('yjs:load-doc-state', id),
+    appendUpdate: (id: string, update: Uint8Array) =>
+      ipcRenderer.invoke('yjs:append-update', id, update),
+    getUpdatesSince: (id: string, sinceSeq: number) =>
+      ipcRenderer.invoke('yjs:get-updates-since', id, sinceSeq),
+    getMaxSeq: (id: string) => ipcRenderer.invoke('yjs:get-max-seq', id),
+    onRemoteUpdate: (
+      cb: (payload: { narrativeId: string; seq: number; update: Uint8Array }) => void
+    ) => {
+      const handler = (
+        _e: Electron.IpcRendererEvent,
+        payload: { narrativeId: string; seq: number; update: Uint8Array }
+      ) => cb(payload)
+      ipcRenderer.on('yjs:remote-update', handler)
       return () => {
-        ipcRenderer.removeListener('narratives:external-change', handler)
+        ipcRenderer.removeListener('yjs:remote-update', handler)
       }
     }
   }

@@ -1,39 +1,42 @@
-import type { NarrativeIndexEntry, NarrativeData, NarrativeCreateResult, NarrativeImportItem } from '../../../preload/index.d'
+import type {
+  NarrativeIndexEntry,
+  NarrativeCreateResult,
+  YjsNarrativeRow
+} from '../../../preload/index.d'
 
-export type { NarrativeIndexEntry, NarrativeData, NarrativeCreateResult, NarrativeImportItem }
+export type { NarrativeIndexEntry, NarrativeCreateResult }
 
-export function listNarratives(): Promise<NarrativeIndexEntry[]> {
-  return window.api.narratives.list()
+function yjsRowToIndexEntry(row: YjsNarrativeRow): NarrativeIndexEntry {
+  return { id: row.id, title: row.title, updatedAt: row.updatedAt }
 }
 
-export function getNarrative(id: string): Promise<NarrativeData | null> {
-  return window.api.narratives.get(id)
+export async function listNarratives(): Promise<NarrativeIndexEntry[]> {
+  const rows = await window.api.yjs.listNarratives()
+  return rows.map(yjsRowToIndexEntry)
 }
 
-export function createNarrative(title?: string): Promise<NarrativeCreateResult> {
-  return window.api.narratives.create(title)
-}
-
-export function updateDraft(narrativeId: string, content: unknown, title: string): Promise<void> {
-  return window.api.narratives.updateDraft(narrativeId, content, title)
+export async function createNarrative(title?: string): Promise<NarrativeCreateResult> {
+  const row = await window.api.yjs.createNarrative({ title: title ?? 'Untitled' })
+  // Preserve the legacy return shape so callers don't need to change.
+  // draftId is no longer meaningful in the Yjs world; return the narrative
+  // id as a placeholder.
+  return { narrativeId: row.id, draftId: row.id }
 }
 
 export function deleteNarrative(id: string): Promise<void> {
-  return window.api.narratives.delete(id)
+  return window.api.yjs.deleteNarrative(id)
 }
 
-export function getLatestNarrativeId(): Promise<string | null> {
-  return window.api.narratives.getLatestId()
+export function renameNarrative(id: string, title: string): Promise<void> {
+  return window.api.yjs.updateMeta(id, { title })
 }
 
-export function importNarratives(items: NarrativeImportItem[]): Promise<void> {
-  return window.api.narratives.import(items)
+export async function getLatestNarrativeId(): Promise<string | null> {
+  const rows = await window.api.yjs.listNarratives()
+  return rows.length > 0 ? rows[0].id : null
 }
 
-export function hasLocalData(): Promise<boolean> {
-  return window.api.narratives.hasLocalData()
-}
-
-export function onExternalChange(cb: (data: { filename: string }) => void): () => void {
-  return window.api.narratives.onExternalChange(cb)
+export async function hasLocalData(): Promise<boolean> {
+  const rows = await window.api.yjs.listNarratives()
+  return rows.length > 0
 }
