@@ -1,0 +1,9 @@
+{
+  "name": "ul-temenos-mcp-deps",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Isolated Node-ABI better-sqlite3 build for the MCP server. The app's root node_modules holds the Electron-ABI build; this dir lets both run concurrently.",
+  "dependencies": {
+    "better-sqlite3": "^12.9.0"
+  }
+}

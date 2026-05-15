@@ -8,12 +8,12 @@
     "build": "electron-vite build",
     "dist": "electron-vite build && electron-builder --mac --publish never",
     "publish": "electron-vite build && electron-builder --mac --publish always",
-    "test": "npm rebuild better-sqlite3 && vitest run src/main/yjs src/mcp && npm run rebuild:native",
+    "test": "MCP_SQLITE_PATH=\"$PWD/mcp-deps/node_modules/better-sqlite3\" vitest run src/main/yjs src/mcp",
     "test:yjs": "npm run test",
-    "mcp:dev": "npm run rebuild:node && tsx src/mcp/server.ts",
+    "mcp:dev": "MCP_SQLITE_PATH=\"$PWD/mcp-deps/node_modules/better-sqlite3\" tsx src/mcp/server.ts",
     "rebuild:native": "electron-rebuild -f -w better-sqlite3",
-    "rebuild:node": "npm rebuild better-sqlite3",
-    "postinstall": "electron-rebuild -f -w better-sqlite3"
+    "mcp-deps:install": "cd mcp-deps && npm install --no-audit --no-fund",
+    "postinstall": "electron-rebuild -f -w better-sqlite3 && npm run mcp-deps:install"
   },
   "build": {
     "appId": "com.deshpanderitwik.ul-temenos-v2",

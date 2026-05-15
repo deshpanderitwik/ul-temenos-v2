@@ -20,18 +20,13 @@ import { applyContentReplacement, docToTipTapJSON } from './yjs-mcp-bridge'
 
 // Initialize the SQLite store at the same path the desktop app uses. The MCP
 // server and app share the file via WAL — concurrent reads are fine, writes
-// serialize via SQLite transactions.
-//
-// If better-sqlite3 fails to load with a NODE_MODULE_VERSION error, the
-// native binary is currently compiled for Electron rather than Node. Run
-// `npm run rebuild:node` once before `npm run mcp:dev`; rerun
-// `npm run rebuild:native` before launching the desktop app again. Turn 8
-// or later will likely consolidate this.
+// serialize via SQLite transactions. better-sqlite3 is loaded from mcp-deps/
+// (Node ABI) via MCP_SQLITE_PATH so the root Electron-ABI build stays free
+// for the app to use concurrently — see src/main/yjs/db.ts.
 try {
   initDb()
 } catch (err) {
-  console.error('[mcp] failed to open SQLite — see comment above for the')
-  console.error('[mcp] native-module rebuild dance. Underlying error:')
+  console.error('[mcp] failed to open SQLite. Underlying error:')
   console.error(err)
   process.exit(1)
 }

@@ -1,7 +1,15 @@
-import Database, { type Database as DatabaseType } from 'better-sqlite3'
+import type { Database as DatabaseType } from 'better-sqlite3'
 import { mkdirSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { homedir } from 'node:os'
+
+// The Electron app and the MCP server can't share a single better-sqlite3
+// binary because their NODE_MODULE_VERSIONs differ. Root node_modules holds
+// the Electron-ABI build; mcp-deps/ holds the Node-ABI build. The MCP server
+// sets MCP_SQLITE_PATH to the latter so the right binary loads at runtime.
+const sqliteSpecifier = process.env.MCP_SQLITE_PATH ?? 'better-sqlite3'
+const Database = createRequire(__filename)(sqliteSpecifier) as typeof import('better-sqlite3')
 
 const DB_PATH = join(homedir(), '.temenos', 'temenos.db')
 
